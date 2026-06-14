@@ -12,8 +12,13 @@ class AppTest extends CIUnitTestCase
         parent::setUp();
         putenv('app.allowedHostnames');
         putenv('ALLOWED_HOSTNAMES');
-        unset($_ENV['app.allowedHostnames'], $_ENV['ALLOWED_HOSTNAMES']);
-        unset($_SERVER['app.allowedHostnames'], $_SERVER['ALLOWED_HOSTNAMES']);
+        putenv('FORCE_HTTPS');
+        putenv('X_FORWARDED_HOST');
+        putenv('X_FORWARDED_PROTO');
+        putenv('APP_BASE_URL');
+        unset($_ENV['app.allowedHostnames'], $_ENV['ALLOWED_HOSTNAMES'], $_ENV['FORCE_HTTPS'], $_ENV['X_FORWARDED_HOST'], $_ENV['X_FORWARDED_PROTO'], $_ENV['APP_BASE_URL']);
+        unset($_SERVER['app.allowedHostnames'], $_SERVER['ALLOWED_HOSTNAMES'], $_SERVER['FORCE_HTTPS'], $_SERVER['X_FORWARDED_HOST'], $_SERVER['X_FORWARDED_PROTO'], $_SERVER['APP_BASE_URL']);
+        unset($_SERVER['HTTP_X_FORWARDED_HOST'], $_SERVER['HTTP_X_FORWARDED_PROTO']);
     }
 
     protected function tearDown(): void
@@ -23,9 +28,15 @@ class AppTest extends CIUnitTestCase
         putenv('CI_ENVIRONMENT');
         putenv('app.allowedHostnames');
         putenv('ALLOWED_HOSTNAMES');
+        putenv('FORCE_HTTPS');
+        putenv('X_FORWARDED_HOST');
+        putenv('X_FORWARDED_PROTO');
+        putenv('APP_BASE_URL');
         unset($_SERVER['HTTP_HOST']);
-        unset($_ENV['app.allowedHostnames'], $_ENV['ALLOWED_HOSTNAMES']);
-        unset($_SERVER['app.allowedHostnames'], $_SERVER['ALLOWED_HOSTNAMES']);
+        unset($_SERVER['HTTP_X_FORWARDED_HOST'], $_SERVER['HTTP_X_FORWARDED_PROTO']);
+        unset($_SERVER['REQUEST_SCHEME']);
+        unset($_ENV['app.allowedHostnames'], $_ENV['ALLOWED_HOSTNAMES'], $_ENV['FORCE_HTTPS'], $_ENV['X_FORWARDED_HOST'], $_ENV['X_FORWARDED_PROTO'], $_ENV['APP_BASE_URL']);
+        unset($_SERVER['app.allowedHostnames'], $_SERVER['ALLOWED_HOSTNAMES'], $_SERVER['FORCE_HTTPS'], $_SERVER['X_FORWARDED_HOST'], $_SERVER['X_FORWARDED_PROTO'], $_SERVER['APP_BASE_URL']);
         $_SERVER['CI_ENVIRONMENT'] = 'testing';
     }
 
@@ -145,6 +156,54 @@ class AppTest extends CIUnitTestCase
         };
 
         $this->assertStringContainsString('example.com', $app->baseURL);
+    }
+
+    public function testBaseURLUsesConfiguredBaseUrl(): void
+    {
+        putenv('APP_BASE_URL=https://n8n.thestealdeal.com');
+        $_SERVER['HTTP_HOST'] = 'localhost:8080';
+        $_SERVER['SCRIPT_NAME'] = '/index.php';
+
+        $app = new App();
+
+        $this->assertSame('https://n8n.thestealdeal.com/', $app->baseURL);
+    }
+
+    public function testBaseURLUsesForwardedHostBehindProxy(): void
+    {
+        putenv('app.allowedHostnames=n8n.thestealdeal.com');
+        $_SERVER['HTTP_HOST'] = 'localhost:8080';
+        $_SERVER['HTTP_X_FORWARDED_HOST'] = 'n8n.thestealdeal.com';
+        $_SERVER['HTTP_X_FORWARDED_PROTO'] = 'https';
+        $_SERVER['SCRIPT_NAME'] = '/index.php';
+
+        $app = new App();
+
+        $this->assertSame('https://n8n.thestealdeal.com/', $app->baseURL);
+    }
+
+    public function testBaseURLUsesForceHttpsEnvironmentVariable(): void
+    {
+        putenv('app.allowedHostnames=example.com');
+        putenv('FORCE_HTTPS=true');
+        $_SERVER['HTTP_HOST'] = 'example.com';
+        $_SERVER['SCRIPT_NAME'] = '/index.php';
+
+        $app = new App();
+
+        $this->assertSame('https://example.com/', $app->baseURL);
+    }
+
+    public function testBaseURLAllowsHostWithPortWhenHostnameMatches(): void
+    {
+        $_SERVER['HTTP_HOST'] = 'example.com:8080';
+        $_SERVER['SCRIPT_NAME'] = '/index.php';
+
+        $app = new class extends App {
+            public array $allowedHostnames = ['example.com'];
+        };
+
+        $this->assertSame('http://example.com:8080/', $app->baseURL);
     }
 
     public function testBaseURLUsesFallbackHostWhenInvalidHostProvided(): void

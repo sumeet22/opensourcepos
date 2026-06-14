@@ -296,12 +296,73 @@ class App extends BaseConfig
             ));
         }
 
-        $this->https_on = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] == 'on') || (isset($_ENV['FORCE_HTTPS']) && $_ENV['FORCE_HTTPS'] == 'true');
+        $configuredBaseUrl = $this->getConfiguredBaseUrl();
+
+        if ($configuredBaseUrl !== null) {
+            $this->https_on = str_starts_with(strtolower($configuredBaseUrl), 'https://');
+            $this->baseURL = $configuredBaseUrl;
+
+            return;
+        }
+
+        $this->https_on = $this->isHttpsRequest();
 
         $host = $this->getValidHost();
-        $this->baseURL = $this->https_on ? 'https' : 'http';
-        $this->baseURL .= '://' . $host . '/';
-        $this->baseURL .= str_replace(basename($_SERVER['SCRIPT_NAME']), '', $_SERVER['SCRIPT_NAME']);
+        $this->baseURL = $this->buildBaseUrl($host);
+    }
+
+    private function getConfiguredBaseUrl(): ?string
+    {
+        $baseUrl = $this->getEnvString('APP_BASE_URL') ?? $this->getEnvString('app.baseURL');
+
+        if ($baseUrl === null) {
+            return null;
+        }
+
+        $baseUrl = trim($baseUrl, " \t\n\r\0\x0B\"'");
+
+        if ($baseUrl === '') {
+            return null;
+        }
+
+        return str_ends_with($baseUrl, '/') ? $baseUrl : $baseUrl . '/';
+    }
+
+    private function isHttpsRequest(): bool
+    {
+        $forceHttps = $this->getEnvString('FORCE_HTTPS');
+
+        $forceHttps = strtolower(trim($forceHttps));
+
+        if (in_array($forceHttps, ['1', 'true', 'on', 'yes'], true)) {
+            return true;
+        }
+
+        if (isset($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) === 'on') {
+            return true;
+        }
+
+        if (isset($_SERVER['REQUEST_SCHEME']) && strtolower((string) $_SERVER['REQUEST_SCHEME']) === 'https') {
+            return true;
+        }
+
+        $forwardedProto = $this->getForwardedValue('HTTP_X_FORWARDED_PROTO', 'X_FORWARDED_PROTO');
+
+        if ($forwardedProto !== null) {
+            $forwardedProto = strtolower(trim(explode(',', $forwardedProto)[0]));
+
+            return $forwardedProto === 'https';
+        }
+
+        return false;
+    }
+
+    private function buildBaseUrl(string $host): string
+    {
+        $scheme = $this->https_on ? 'https' : 'http';
+        $scriptName = $_SERVER['SCRIPT_NAME'] ?? '/index.php';
+
+        return $scheme . '://' . $host . '/' . str_replace(basename($scriptName), '', $scriptName);
     }
 
     /**
@@ -318,7 +379,7 @@ class App extends BaseConfig
      */
     private function getValidHost(): string
     {
-        $httpHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $httpHost = $this->getRequestHost();
 
         // Determine environment
         // CodeIgniter's test bootstrap sets $_SERVER['CI_ENVIRONMENT'] = 'testing'
@@ -343,7 +404,9 @@ class App extends BaseConfig
             return 'localhost';
         }
 
-        if (in_array($httpHost, $this->allowedHostnames, true)) {
+        $allowedHostnames = array_map([$this, 'normalizeHostname'], $this->allowedHostnames);
+
+        if (in_array($this->normalizeHostname($httpHost), $allowedHostnames, true)) {
             return $httpHost;
         }
 
@@ -354,6 +417,71 @@ class App extends BaseConfig
         );
 
         return $this->allowedHostnames[0];
+    }
+
+    private function getRequestHost(): string
+    {
+        $forwardedHost = $this->getForwardedValue('HTTP_X_FORWARDED_HOST', 'X_FORWARDED_HOST');
+
+        if ($forwardedHost !== null) {
+            $host = $this->parseForwardedHost($forwardedHost);
+
+            if ($host !== '') {
+                return $host;
+            }
+        }
+
+        return $_SERVER['HTTP_HOST'] ?? 'localhost';
+    }
+
+    private function getForwardedValue(string $serverKey, string $envKey): ?string
+    {
+        $value = $_SERVER[$serverKey] ?? null;
+
+        if (is_string($value) && trim($value) !== '') {
+            return $value;
+        }
+
+        $envValue = $this->getEnvString($envKey);
+
+        if ($envValue !== null) {
+            return $envValue;
+        }
+
+        return null;
+    }
+
+    private function parseForwardedHost(string $forwardedHost): string
+    {
+        $host = trim(explode(',', $forwardedHost)[0]);
+
+        if (preg_match('#^https?://#i', $host) === 1) {
+            $parsedHost = parse_url($host, PHP_URL_HOST);
+
+            if (is_string($parsedHost) && $parsedHost !== '') {
+                return $parsedHost;
+            }
+        }
+
+        return trim($host, " \t\n\r\0\x0B\"'");
+    }
+
+    private function normalizeHostname(string $hostname): string
+    {
+        $hostname = strtolower(trim($hostname));
+        $hostname = rtrim($hostname, '.');
+
+        if (str_starts_with($hostname, '[')) {
+            if (preg_match('/^\[([^\]]+)\]/', $hostname, $matches) === 1) {
+                return strtolower($matches[1]);
+            }
+        }
+
+        if (substr_count($hostname, ':') === 1) {
+            $hostname = explode(':', $hostname, 2)[0];
+        }
+
+        return $hostname;
     }
 
     private function getEnvString(string $key): ?string
