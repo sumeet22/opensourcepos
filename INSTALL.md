@@ -81,6 +81,15 @@ Start the containers using the following command
 By default the web app is published on `http://localhost:8080/` so it does not
 conflict with a host service already using port `80`.
 
+For a Dockploy or reverse-proxy deployment, set `ALLOWED_HOSTNAMES` to the
+public hostname you are using, and optionally set `HOST_PORT` if you need a
+different published port. Example:
+
+```bash
+ALLOWED_HOSTNAMES=sublitext-pos-iqh0bn-3d05b1-161-97-69-153.sslip.io
+FORCE_HTTPS=true
+```
+
 ## Nginx install using Docker
 
 Since OSPOS version `3.3.0` the Docker installation offers a reverse proxy based on Nginx with a Let's Encrypt TLS certificate termination (aka HTTPS connection).
