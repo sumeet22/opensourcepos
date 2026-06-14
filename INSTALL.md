@@ -78,6 +78,9 @@ Start the containers using the following command
     docker-compose up
 ```
 
+By default the web app is published on `http://localhost:8080/` so it does not
+conflict with a host service already using port `80`.
+
 ## Nginx install using Docker
 
 Since OSPOS version `3.3.0` the Docker installation offers a reverse proxy based on Nginx with a Let's Encrypt TLS certificate termination (aka HTTPS connection).

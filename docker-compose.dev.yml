@@ -39,14 +39,14 @@ services:
         depends_on:
             - mysql
         ports:
-            - "80:80"
+            - "8080:80"
         networks:
             - app_net
         volumes:
             - .:/app
         environment:
             - CI_ENVIRONMENT=development
-            - ALLOWED_HOSTNAMES=localhost
+            - ALLOWED_HOSTNAMES=localhost:8080
             - MYSQL_USERNAME=admin
             - MYSQL_PASSWORD=pointofsale
             - MYSQL_DB_NAME=ospos
