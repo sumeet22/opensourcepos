@@ -27,12 +27,41 @@
 <script type="text/javascript">
     // Validation and submit handling
     $(document).ready(function() {
+        const $errorBox = $('#error_message_box');
+
+        const showImportError = function(message) {
+            $errorBox.empty().append($('<li>').text(message)).show();
+            $.notify(message, { type: 'danger' });
+        };
+
+        const getAjaxErrorMessage = function(xhr) {
+            if (xhr.responseJSON && xhr.responseJSON.message) {
+                return xhr.responseJSON.message;
+            }
+
+            if (xhr.responseText && xhr.responseText.charAt(0) !== '<') {
+                return xhr.responseText;
+            }
+
+            return "<?= esc(lang('Items.csv_import_failed'), 'js') ?>";
+        };
+
         $('#csv_form').validate($.extend({
             submitHandler: function(form) {
                 $(form).ajaxSubmit({
                     success: function(response) {
-                        dialog_support.hide();
-                        table_support.handle_submit('<?= esc('items') ?>', response);
+                        $errorBox.empty().hide();
+
+                        if (response.success) {
+                            dialog_support.hide();
+                            table_support.handle_submit('<?= esc('items') ?>', response);
+                            return;
+                        }
+
+                        showImportError(response.message || "<?= esc(lang('Items.csv_import_failed'), 'js') ?>");
+                    },
+                    error: function(xhr) {
+                        showImportError(getAjaxErrorMessage(xhr));
                     },
                     dataType: 'json'
                 });

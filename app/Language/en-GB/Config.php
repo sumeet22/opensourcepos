@@ -258,6 +258,7 @@ return [
     "receipt"                                   => "Receipt",
     "receipt_category"                          => "",
     "receipt_configuration"                     => "Receipt Print Settings",
+    "receipt_2inch"                            => "2 inch",
     "receipt_default"                           => "Default",
     "receipt_font_size"                         => "Font Size",
     "receipt_font_size_number"                  => "Font Size must be a number.",

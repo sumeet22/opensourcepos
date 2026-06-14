@@ -4,6 +4,8 @@ namespace Tests\Controllers;
 
 use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\DatabaseTestTrait;
+use CodeIgniter\Test\FeatureTestTrait;
+use CodeIgniter\Config\Services;
 use App\Models\Item;
 use App\Models\Item_quantity;
 use App\Models\Inventory;
@@ -16,6 +18,7 @@ use Config\Database;
 class ItemsCsvImportTest extends CIUnitTestCase
 {
     use DatabaseTestTrait;
+    use FeatureTestTrait;
 
     protected $migrate = true;
     protected $migrateOnce = true;
@@ -57,7 +60,16 @@ class ItemsCsvImportTest extends CIUnitTestCase
 
     protected function tearDown(): void
     {
+        unset($_FILES['file_path']);
         parent::tearDown();
+    }
+
+    protected function resetSession(): void
+    {
+        $session = Services::session();
+        $session->destroy();
+        $session->set('person_id', 1);
+        $session->set('menu_group', 'office');
     }
 
     public function testGenerateCsvHeaderBasic(): void
@@ -1110,5 +1122,150 @@ class ItemsCsvImportTest extends CIUnitTestCase
         $csvLocationName = 'Warehouse';
         $isValid = in_array($csvLocationName, $allowedLocations);
         $this->assertTrue($isValid, 'Valid location name should pass validation');
+    }
+
+    public function testImportCsvFileReturnsJsonForValidTemplateUpload(): void
+    {
+        $this->resetSession();
+
+        $locationName = 'ImportLocation' . uniqid();
+        $locationData = ['location_name' => $locationName, 'deleted' => 0];
+        $this->assertTrue($this->stock_location->save_value($locationData, NEW_ENTRY));
+
+        $barcode = 'CSV-ITEM-' . uniqid();
+        $csvContent = generate_import_items_csv([$locationName], []) . "\n";
+        $csvContent .= sprintf(
+            ',%s,%s,%s,,10.00,15.00,,,,,2,%s,0,0,,HSN001,5',
+            $barcode,
+            'CSV Import Item',
+            'CSV Test Category',
+            'Imported from test'
+        );
+
+        $tempFile = tempnam(sys_get_temp_dir(), 'items_csv_import_');
+        file_put_contents($tempFile, $csvContent);
+
+        $_FILES['file_path'] = [
+            'name' => 'items.csv',
+            'type' => 'text/csv',
+            'tmp_name' => $tempFile,
+            'error' => UPLOAD_ERR_OK,
+            'size' => filesize($tempFile)
+        ];
+
+        $response = $this->withSession(['person_id' => 1, 'menu_group' => 'office'])
+            ->post('/items/importCsvFile');
+
+        $response->assertStatus(200);
+        $result = json_decode($response->getJSON(), true);
+
+        $this->assertIsArray($result);
+        $this->assertTrue($result['success']);
+        $this->assertSame(lang('Items.csv_import_success'), $result['message']);
+
+        $savedItem = $this->item->get_info_by_id_or_number($barcode);
+        $this->assertNotFalse($savedItem);
+        $this->assertEquals('CSV Import Item', $savedItem->name);
+        $this->assertEquals('CSV Test Category', $savedItem->category);
+
+        unlink($tempFile);
+    }
+
+    public function testImportCsvFileInvalidStockLocationReturnsJsonFailure(): void
+    {
+        $this->resetSession();
+
+        $csvContent = generate_import_items_csv(['MissingLocation'], []) . "\n";
+        $csvContent .= ',CSV-INVALID-LOCATION,Invalid Location Item,CSV Test Category,,10.00,15.00,,,,,2,Imported from test,0,0,,HSN001,5';
+
+        $tempFile = tempnam(sys_get_temp_dir(), 'items_csv_invalid_location_');
+        file_put_contents($tempFile, $csvContent);
+
+        $_FILES['file_path'] = [
+            'name' => 'items_invalid_location.csv',
+            'type' => 'text/csv',
+            'tmp_name' => $tempFile,
+            'error' => UPLOAD_ERR_OK,
+            'size' => filesize($tempFile)
+        ];
+
+        $response = $this->withSession(['person_id' => 1, 'menu_group' => 'office'])
+            ->post('/items/importCsvFile');
+
+        $response->assertStatus(200);
+        $result = json_decode($response->getJSON(), true);
+
+        $this->assertIsArray($result);
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString('line', strtolower($result['message']));
+        $this->assertStringNotContainsString('<html', strtolower($response->getBody()));
+
+        unlink($tempFile);
+    }
+
+    public function testImportCsvFileNonNumericSupplierIdReturnsJsonFailure(): void
+    {
+        $this->resetSession();
+
+        $csvContent = generate_import_items_csv([], []) . "\n";
+        $csvContent .= ',CSV-BAD-SUPPLIER,Invalid Supplier Item,CSV Test Category,ABC,10.00,15.00,,,,,2,Imported from test,0,0,,HSN001';
+
+        $tempFile = tempnam(sys_get_temp_dir(), 'items_csv_invalid_supplier_');
+        file_put_contents($tempFile, $csvContent);
+
+        $_FILES['file_path'] = [
+            'name' => 'items_invalid_supplier.csv',
+            'type' => 'text/csv',
+            'tmp_name' => $tempFile,
+            'error' => UPLOAD_ERR_OK,
+            'size' => filesize($tempFile)
+        ];
+
+        $response = $this->withSession(['person_id' => 1, 'menu_group' => 'office'])
+            ->post('/items/importCsvFile');
+
+        $response->assertStatus(200);
+        $result = json_decode($response->getJSON(), true);
+
+        $this->assertIsArray($result);
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString('line', strtolower($result['message']));
+        $this->assertStringNotContainsString('argument #1', strtolower($response->getBody()));
+
+        unlink($tempFile);
+    }
+
+    public function testImportCsvFileWithoutLocationColumnsDoesNotRaiseUndefinedArrayKey(): void
+    {
+        $this->resetSession();
+
+        $locationData = ['location_name' => 'stock', 'deleted' => 0];
+        $this->assertTrue($this->stock_location->save_value($locationData, NEW_ENTRY));
+
+        $csvContent = "Id,Barcode,\"Item Name\",Category,\"Supplier ID\",\"Cost Price\",\"Unit Price\",\"Tax 1 Name\",\"Tax 1 Percent\",\"Tax 2 Name\",\"Tax 2 Percent\",\"Reorder Level\",Description,\"Allow Alt Description\",\"Item has Serial Number\",Image,HSN\n";
+        $csvContent .= ",CSV-NO-LOCATION,No Location Column Item,CSV Test Category,,10.00,15.00,,,,,2,Imported from test,0,0,,HSN001\n";
+
+        $tempFile = tempnam(sys_get_temp_dir(), 'items_csv_no_location_columns_');
+        file_put_contents($tempFile, $csvContent);
+
+        $_FILES['file_path'] = [
+            'name' => 'items_no_location_columns.csv',
+            'type' => 'text/csv',
+            'tmp_name' => $tempFile,
+            'error' => UPLOAD_ERR_OK,
+            'size' => filesize($tempFile)
+        ];
+
+        $response = $this->withSession(['person_id' => 1, 'menu_group' => 'office'])
+            ->post('/items/importCsvFile');
+
+        $response->assertStatus(200);
+        $result = json_decode($response->getJSON(), true);
+
+        $this->assertIsArray($result);
+        $this->assertTrue($result['success']);
+        $this->assertStringNotContainsString('undefined array key', strtolower($response->getBody()));
+
+        unlink($tempFile);
     }
 }

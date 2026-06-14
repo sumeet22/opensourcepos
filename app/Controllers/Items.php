@@ -980,7 +980,7 @@ class Items extends Secure_Controller
     {
         helper('importfile');
         try {
-            if ($_FILES['file_path']['error'] !== UPLOAD_ERR_OK) {
+            if (!isset($_FILES['file_path']) || $_FILES['file_path']['error'] !== UPLOAD_ERR_OK) {
                 return $this->response->setJSON(['success' => false, 'message' => lang('Items.csv_import_failed')]);
             } else {
                 if (file_exists($_FILES['file_path']['tmp_name'])) {
@@ -1023,10 +1023,6 @@ class Items extends Secure_Controller
                             'pic_filename'  => $row['Image']
                         ];
 
-                        if (!empty($row['Supplier ID'])) {
-                            $itemData['supplier_id'] = $this->supplier->exists($row['Supplier ID']) ? $row['Supplier ID'] : null;
-                        }
-
                         if ($isUpdate) {
                             $itemData['allow_alt_description'] = $row['Allow Alt Description'] === '' ? null : $row['Allow Alt Description'];
                             $itemData['is_serialized'] = $row['Item has Serial Number'] === '' ? null : $row['Item has Serial Number'];
@@ -1043,9 +1039,10 @@ class Items extends Secure_Controller
                         if (!$isFailedRow) {
                             $allowedStockLocations = $this->stock_location->get_allowed_locations();
                             $isFailedRow = $this->validateCSVData($row, $itemData, $allowedStockLocations, $attributeDefinitionNames, $attributeData);
-                            if (!empty($invalidLocations)) {
-                                $isFailedRow = true;
-                                log_message('error', 'CSV import: Invalid stock location(s) found: ' . implode(', ', $invalidLocations));
+
+                            if (!$isFailedRow && !empty($row['Supplier ID'])) {
+                                $supplierId = (int)$row['Supplier ID'];
+                                $itemData['supplier_id'] = $this->supplier->exists($supplierId) ? $supplierId : null;
                             }
                         }
 
@@ -1193,7 +1190,7 @@ class Items extends Secure_Controller
         ];
 
         foreach ($allowedStockLocations as $location_name) {
-            $valuesToCheckForNumeric[] = $row["location_$location_name"];
+            $valuesToCheckForNumeric["location_$location_name"] = $row["location_$location_name"] ?? '';
         }
 
         // Check for non-numeric values which require numeric
@@ -1270,6 +1267,8 @@ class Items extends Secure_Controller
 
         foreach ($allowed_locations as $location_id => $location_name) {
             $item_quantity_data = ['item_id' => $item_data['item_id'], 'location_id' => $location_id];
+            $locationColumn = "location_$location_name";
+            $locationQuantity = $row[$locationColumn] ?? '';
 
             $csv_data = [
                 'trans_items'    => $item_data['item_id'],
@@ -1278,11 +1277,11 @@ class Items extends Secure_Controller
                 'trans_location' => $location_id
             ];
 
-            if (!empty($row["location_$location_name"]) || $row["location_$location_name"] === '0') {
-                $item_quantity_data['quantity'] = $row["location_$location_name"];
+            if (!empty($locationQuantity) || $locationQuantity === '0') {
+                $item_quantity_data['quantity'] = $locationQuantity;
                 $success &= $this->item_quantity->save_value($item_quantity_data, $item_data['item_id'], $location_id);
 
-                $csv_data['trans_inventory'] = $row["location_$location_name"];
+                $csv_data['trans_inventory'] = $locationQuantity;
                 $success &= (bool)$this->inventory->insert($csv_data, false);
             } elseif ($is_update) {
                 continue;

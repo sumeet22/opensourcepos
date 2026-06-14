@@ -2,6 +2,8 @@
 
 namespace Tests\Controllers;
 
+use App\Libraries\Sale_lib;
+use App\Models\Appconfig;
 use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\DatabaseTestTrait;
 use CodeIgniter\Test\FeatureTestTrait;
@@ -217,5 +219,34 @@ class ConfigTest extends CIUnitTestCase
         $response->assertStatus(200);
         $result = json_decode($response->getJSON(), true);
         $this->assertFalse($result['success']);
+    }
+
+    public function testReceiptTemplateAllowsTwoInch(): void
+    {
+        $this->assertTrue(Sale_lib::isValidReceiptTemplate('receipt_2inch'));
+    }
+
+    public function testSaveReceiptPersistsTwoInchTemplate(): void
+    {
+        $this->resetSession();
+
+        $response = $this->post('/config/saveReceipt', [
+            'receipt_template' => 'receipt_2inch',
+            'receipt_font_size' => '10',
+            'print_delay_autoreturn' => '0',
+            'email_receipt_check_behaviour' => 'always',
+            'print_receipt_check_behaviour' => 'always',
+            'print_top_margin' => '0',
+            'print_left_margin' => '0',
+            'print_bottom_margin' => '0',
+            'print_right_margin' => '0'
+        ]);
+
+        $response->assertStatus(200);
+        $result = json_decode($response->getJSON(), true);
+        $this->assertTrue($result['success']);
+
+        $appconfig = model(Appconfig::class);
+        $this->assertSame('receipt_2inch', $appconfig->get_value('receipt_template'));
     }
 }

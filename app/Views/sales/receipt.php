@@ -9,10 +9,20 @@
 use App\Models\Employee;
 
 $template = $receipt_template_view ?? 'receipt_default';
+$is_two_inch_template = $template === 'receipt_2inch';
 
 ?>
 
 <?= view('partial/header') ?>
+
+<?php if ($is_two_inch_template): ?>
+    <script type="text/javascript">
+        document.documentElement.classList.add('receipt-template-2inch');
+        document.addEventListener('DOMContentLoaded', function() {
+            document.body.classList.add('receipt-template-2inch');
+        });
+    </script>
+<?php endif; ?>
 
 <?php
 if (isset($error_message)) {
