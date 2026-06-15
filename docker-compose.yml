@@ -3,7 +3,7 @@ include:
 
 services:
     ospos:
-        image: jekkos/opensourcepos:master
+        build: .
         restart: always
         depends_on:
             - mysql
