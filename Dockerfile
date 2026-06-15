@@ -4,6 +4,10 @@ LABEL maintainer="jekkos"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libicu-dev \
     libgd-dev \
+    curl \
+    gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
     && docker-php-ext-install mysqli bcmath intl gd \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
@@ -16,6 +20,14 @@ ENV ALLOWED_HOSTNAMES=n8n.thestealdeal.com
 ENV FORCE_HTTPS=true
 ENV APP_BASE_URL=https://n8n.thestealdeal.com/
 COPY --chown=www-data:www-data . /app
+
+# Copy composer and install dependencies (PHP & Node)
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts \
+    && npm ci \
+    && npm run build \
+    && chown -R www-data:www-data /app
+
 RUN chmod 750 /app/writable/logs /app/writable/uploads /app/writable/cache /app/public/uploads /app/public/uploads/item_pics \
     && chmod 640 /app/writable/uploads/importCustomers.csv \
     && ln -s /app/*[^public] /var/www \
