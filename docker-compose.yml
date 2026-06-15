@@ -16,8 +16,6 @@ services:
             - logs:/app/writable/logs
         environment:
             - CI_ENVIRONMENT=production
-            - ALLOWED_HOSTNAMES=${ALLOWED_HOSTNAMES:-localhost:8080}
-            - FORCE_HTTPS=${FORCE_HTTPS:-false}
             - PHP_TIMEZONE=UTC
             - MYSQL_USERNAME=admin
             - MYSQL_PASSWORD=pointofsale
