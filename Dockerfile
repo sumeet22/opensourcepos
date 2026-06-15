@@ -12,6 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN echo "date.timezone = \"\${PHP_TIMEZONE}\"" > /usr/local/etc/php/conf.d/timezone.ini
 
 WORKDIR /app
+ENV ALLOWED_HOSTNAMES=n8n.thestealdeal.com
+ENV FORCE_HTTPS=true
+ENV APP_BASE_URL=https://n8n.thestealdeal.com/
 COPY --chown=www-data:www-data . /app
 RUN chmod 750 /app/writable/logs /app/writable/uploads /app/writable/cache /app/public/uploads /app/public/uploads/item_pics \
     && chmod 640 /app/writable/uploads/importCustomers.csv \
