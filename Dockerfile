@@ -23,10 +23,10 @@ COPY --chown=www-data:www-data . /app
 
 # Copy composer and install dependencies (PHP & Node)
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts \
-    && npm ci \
-    && npm run build \
-    && chown -R www-data:www-data /app
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+RUN npm install
+RUN npm run build
+RUN chown -R www-data:www-data /app
 
 RUN chmod 750 /app/writable/logs /app/writable/uploads /app/writable/cache /app/public/uploads /app/public/uploads/item_pics \
     && chmod 640 /app/writable/uploads/importCustomers.csv \
@@ -40,7 +40,7 @@ ARG USERID
 ARG GROUPID
 
 RUN echo "Adding user uid $USERID with gid $GROUPID"
-RUN ( addgroup --gid ${GROUPID:-1000} ospos || true ) && ( adduser --uid ${USERID:-1000} --gid ${GROUPID:-1000} ospos )
+RUN ( addgroup --gid ${GROUPID:-1000} ospos || true ) && ( adduser --disabled-password --gecos "" --uid ${USERID:-1000} --gid ${GROUPID:-1000} ospos )
 
 RUN yes | pecl install xdebug \
     && echo "zend_extension=$(find /usr/local/lib/php/extensions/ -name xdebug.so)" > /usr/local/etc/php/conf.d/xdebug.ini \
