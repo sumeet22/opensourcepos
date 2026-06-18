@@ -19,5 +19,6 @@ services:
             - PHP_TIMEZONE=UTC
             - MYSQL_USERNAME=admin
             - MYSQL_PASSWORD=pointofsale
+            - MYSQL_ROOT_PASSWORD=pointofsale
             - MYSQL_DB_NAME=ospos
             - MYSQL_HOST_NAME=mysql
