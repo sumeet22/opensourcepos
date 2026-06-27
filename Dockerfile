@@ -21,9 +21,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN echo "date.timezone = \"\${PHP_TIMEZONE}\"" > /usr/local/etc/php/conf.d/timezone.ini
 
 WORKDIR /app
-ENV ALLOWED_HOSTNAMES=n8n.thestealdeal.com
-ENV FORCE_HTTPS=true
-ENV APP_BASE_URL=https://n8n.thestealdeal.com/
+ENV ALLOWED_HOSTNAMES=localhost
+ENV FORCE_HTTPS=false
+ENV APP_BASE_URL=http://localhost:8080/
 COPY --chown=www-data:www-data . /app
 
 # Copy composer and install dependencies (PHP & Node)

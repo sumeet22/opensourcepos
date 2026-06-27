@@ -79,6 +79,7 @@ class Autoload extends AutoloadConfig
         'Office'              => '/App/Controllers/Office.php',
         'Persons'             => '/App/Controllers/Persons.php',
         'Receivings'          => '/App/Controllers/Receivings.php',
+        'PublicReceipt'       => '/App/Controllers/PublicReceipt.php',
         'Reports'             => '/App/Controllers/Reports.php',
         'Sales'               => '/App/Controllers/Sales.php',
         'Secure_Controller'   => '/App/Controllers/Secure_Controller.php',

@@ -7,6 +7,7 @@ use App\Libraries\Email_lib;
 use App\Libraries\Sale_lib;
 use App\Libraries\Tax_lib;
 use App\Libraries\Token_lib;
+use App\Libraries\Whatsapp_lib;
 use App\Models\Customer;
 use App\Models\Customer_rewards;
 use App\Models\Dinner_table;
@@ -34,6 +35,7 @@ class Sales extends Secure_Controller
     private Sale_lib $sale_lib;
     private Tax_lib $tax_lib;
     private Token_lib $token_lib;
+    private Whatsapp_lib $whatsapp_lib;
     private Customer $customer;
     private Customer_rewards $customer_rewards;
     private Dinner_table $dinner_table;
@@ -51,6 +53,7 @@ class Sales extends Secure_Controller
         $this->session = session();
         $this->barcode_lib = new Barcode_lib();
         $this->email_lib = new Email_lib();
+        $this->whatsapp_lib = new Whatsapp_lib();
         $this->sale_lib = new Sale_lib();
         $this->tax_lib = new Tax_lib();
         $this->token_lib = new Token_lib();
@@ -1008,6 +1011,64 @@ class Sales extends Secure_Controller
     }
 
     /**
+     * Returns a wa.me click-to-chat URL for the given sale, pre-filled with a
+     * short receipt message. No API credentials required — Mode A deeplink only.
+     *
+     * Accepts an optional ?phone= query-string parameter so the cashier can
+     * send to a walk-in customer who is not saved in the system.
+     *
+     * Used in app/Views/sales/receipt.php ("Send via WhatsApp" button).
+     *
+     * @param int $sale_id
+     * @return ResponseInterface JSON: { success, url, phone, message }
+     * @noinspection PhpUnused
+     */
+    public function getWhatsappReceiptUrl(int $sale_id): ResponseInterface
+    {
+        $sale_data = $this->_load_sale_data($sale_id);
+
+        // Allow a manual phone override from the modal (walk-in customers)
+        $phoneOverride = $this->request->getGet('phone');
+        $phone = !empty($phoneOverride) ? trim($phoneOverride) : ($sale_data['customer_phone'] ?? '');
+
+        if (empty($phone)) {
+            return $this->response->setJSON([
+                'success' => false,
+                'url'     => '',
+                'phone'   => '',
+                'message' => lang('Sales.whatsapp_no_phone'),
+            ]);
+        }
+
+        $encryptionKey = config(\Config\Encryption::class)->key;
+        $hash = substr(hash_hmac('sha256', (string)$sale_id, $encryptionKey), 0, 16);
+        $publicUrl = site_url("publicreceipt/show/$sale_id/$hash");
+
+        $total   = to_currency($sale_data['total'] ?? 0);
+        $saleId  = $sale_data['sale_id'] ?? ('POS ' . $sale_id);
+        $company = $this->config['company'] ?? '';
+
+        $text = $this->whatsapp_lib->buildLinkReceiptMessage($saleId, $total, $company, $publicUrl);
+        $url  = $this->whatsapp_lib->buildChatUrl($phone, $text);
+
+        if (empty($url)) {
+            return $this->response->setJSON([
+                'success' => false,
+                'url'     => '',
+                'phone'   => $phone,
+                'message' => lang('Sales.whatsapp_no_phone'),
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'success' => true,
+            'url'     => $url,
+            'phone'   => $phone,
+            'message' => lang('Sales.whatsapp_sent') . ' ' . $phone,
+        ]);
+    }
+
+    /**
      * @param int $customer_id
      * @param array $data
      * @param bool $stats
@@ -1030,6 +1091,7 @@ class Sales extends Secure_Controller
             $data['first_name'] = $customer_info->first_name;
             $data['last_name'] = $customer_info->last_name;
             $data['customer_email'] = $customer_info->email;
+            $data['customer_phone'] = $customer_info->phone_number;
             $data['customer_address'] = $customer_info->address_1;
 
             if (!empty($customer_info->zip) || !empty($customer_info->city)) {

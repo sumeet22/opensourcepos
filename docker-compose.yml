@@ -22,3 +22,6 @@ services:
             - MYSQL_ROOT_PASSWORD=pointofsale
             - MYSQL_DB_NAME=ospos
             - MYSQL_HOST_NAME=mysql
+            - ALLOWED_HOSTNAMES=${ALLOWED_HOSTNAMES:-n8n.thestealdeal.com}
+            - FORCE_HTTPS=${FORCE_HTTPS:-true}
+            - APP_BASE_URL=${APP_BASE_URL:-https://n8n.thestealdeal.com/}
